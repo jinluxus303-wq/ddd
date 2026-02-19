@@ -93,11 +93,20 @@ export async function GET(req: NextRequest) {
         { success: false, error: "No search results" },
         { status: 404 },
       );
+    const normalizedSearch = title.trim().toLowerCase();
 
-    const selectedItem =
-      items.find((i: any) =>
-        (i?.title || "").toLowerCase().includes(title.toLowerCase()),
-      ) || items[0];
+    const selectedItem = items.find((i: any) => {
+      const itemTitle = (i?.title || "").trim().toLowerCase();
+      return itemTitle === normalizedSearch;
+    });
+
+    if (!selectedItem) {
+      return NextResponse.json(
+        { success: false, error: "Exact movie not found" },
+        { status: 404 },
+      );
+    }
+
     const subjectId = String(selectedItem?.subjectId);
     if (!subjectId)
       return NextResponse.json(
