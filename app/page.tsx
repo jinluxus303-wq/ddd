@@ -110,14 +110,14 @@ export default function Home() {
           className="flex flex-col gap-4 text-base font-medium sm:flex-row w-full"
         >
           <Button>
-            <Link href="https://zxcstream.xyz/embed/movie/157336">
+            <Link href="https://zxcstream.xyz/embed/movie/1062722">
               {" "}
               Test Movie (Embed)
             </Link>
           </Button>
           <Button variant="outline">
             {" "}
-            <Link href="https://zxcstream.xyz/player/movie/157336?autoplay=false&back=true&server=0">
+            <Link href="https://zxcstream.xyz/player/movie/1062722?autoplay=false&back=true&server=0">
               {" "}
               Test Movie (Player)
             </Link>
