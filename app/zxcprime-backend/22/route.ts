@@ -4,14 +4,13 @@ import { validateBackendToken } from "@/lib/validate-token";
 
 // ─── Worker URLs ──────────────────────────────────────────────────────────────
 const SHOWBOX_WORKERS = [
-  "https://mute-resonance-ab25.zxcprime362.workers.dev",
-  "https://febbox.mosangfour.workers.dev",
-  "https://shy-pine-01bc.zxcprime366.workers.dev/",
+  "https://febbox.jinluxuz.workers.dev/",
+
   // add more here
 ];
 
-const FEBBOX_SHARE_WORKER = "https://super-king-4c14.zxcprime362.workers.dev";
-const FEBBOX_PLAYER_WORKER = "https://muddy-mode-4bb2.zxcprime362.workers.dev";
+const FEBBOX_SHARE_WORKER = "https://febbox2.jinluxuz.workers.dev";
+const FEBBOX_PLAYER_WORKER = "https://febbox3.jinluxuz.workers.dev";
 
 // ─── Try each ShowBox worker until one succeeds ───────────────────────────────
 
@@ -150,9 +149,9 @@ export async function GET(req: NextRequest) {
     }
 
     const bestFile =
-      files.find((f) => f.source !== "CAM" && f.quality === "4K") ??
-      files.find((f) => f.source !== "CAM" && f.quality === "1080p") ??
-      files.find((f) => f.source !== "CAM" && f.quality !== "unknown") ??
+      // files.find((f) => f.source !== "CAM" && f.quality === "4K") ??
+      // files.find((f) => f.source !== "CAM" && f.quality === "1080p") ??
+      // files.find((f) => f.source !== "CAM" && f.quality !== "unknown") ??
       files[0];
 
     const fid = bestFile.data_id;
