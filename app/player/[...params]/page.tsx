@@ -37,7 +37,8 @@ import { Button } from "@/components/ui/button";
 import { useVideoAudio } from "./hooks/useVideoAudio";
 import PlayerSettings from "./settings";
 import { useSubtitles } from "@/hook/subtitle-hooks";
-import { useSubtitleUrl } from "@/hook/subtitle";
+import { useOpenSubtitle } from "@/hook/open-subtitle";
+import { useOpenSubtitleVtt } from "@/hook/srt-to-vvt";
 import Link from "next/link";
 import Episodes from "./episodes";
 import Failed from "./failed";
@@ -179,22 +180,33 @@ export default function Player() {
   //   season: media_type === "tv" ? season : undefined,
   //   episode: media_type === "tv" ? episode : undefined,
   // });
-  const { data: vdrk_sub } = useSubtitles({
-    tmdbId: metadata?.id,
-    media_type: media_type,
+  // const { data: vdrk_sub } = useSubtitles({
+  //   tmdbId: metadata?.id,
+  //   media_type: media_type,
+  //   season: media_type === "tv" ? season : undefined,
+  //   episode: media_type === "tv" ? episode : undefined,
+  // });
+  const { data: openSubtitle } = useOpenSubtitle({
+    imdbId: imdbId ?? "",
     season: media_type === "tv" ? season : undefined,
     episode: media_type === "tv" ? episode : undefined,
   });
 
-  const vttUrl = useSubtitleUrl(selectedSub);
-  const englishDefault = (vdrk_sub ?? []).find((s) =>
-    s.display.startsWith("English"),
-  )?.url;
+  const englishDefault =
+    (openSubtitle ?? []).find(
+      (s) => s.language.startsWith("English") && !s.isHearingImpaired,
+    )?.downloadLink ?? null;
+
   useEffect(() => {
-    if (englishDefault) {
-      setSelectedSub(englishDefault);
-    }
+    if (englishDefault) setSelectedSub(englishDefault);
   }, [englishDefault]);
+  const { data: openSubVttUrl } = useOpenSubtitleVtt(selectedSub || null);
+  useEffect(() => {
+    console.log("selectedSub changed to:", selectedSub);
+  }, [selectedSub]);
+  useEffect(() => {
+    console.log("openSubVttUrl", openSubVttUrl);
+  }, [openSubVttUrl]);
 
   const allSeason = metadata?.seasons?.length ?? 0;
 
@@ -277,7 +289,7 @@ export default function Player() {
       cue.startTime = cue.originalStartTime + subtitleOffset;
       cue.endTime = cue.originalEndTime + subtitleOffset;
     }
-  }, [subtitleOffset, vttUrl, selectedSub]);
+  }, [subtitleOffset, openSubVttUrl, selectedSub]);
   const triggerAd = useAdStore((state) => state.triggerAd);
   return (
     <div
@@ -305,11 +317,11 @@ export default function Player() {
       onClick={triggerAd}
     >
       <video muted={autoPlay} className="h-full w-full" ref={videoRef}>
-        {vttUrl && !isInitializing && toggleSub && (
+        {openSubVttUrl && !isInitializing && toggleSub && (
           <track
-            key={`${vttUrl}-${serverIndex}-${source?.type}`}
+            key={openSubVttUrl}
             kind="subtitles"
-            src={vttUrl}
+            src={openSubVttUrl}
             default
           />
         )}
@@ -891,7 +903,7 @@ export default function Player() {
                     audioTracks={audioTracks}
                     selectedAudio={selectedAudio}
                     setSelectedAudio={setSelectedAudio}
-                    data_sub={vdrk_sub ?? []}
+                    data_sub={openSubtitle ?? []}
                     selectedSub={selectedSub}
                     setSelectedSub={setSelectedSub}
                     subtitleOffset={subtitleOffset}
@@ -1149,12 +1161,12 @@ export default function Player() {
                       audioTracks={audioTracks}
                       selectedAudio={selectedAudio}
                       setSelectedAudio={setSelectedAudio}
-                      data_sub={vdrk_sub ?? []}
+                      data_sub={openSubtitle ?? []}
                       selectedSub={selectedSub}
                       setSelectedSub={setSelectedSub}
                       subtitleOffset={subtitleOffset}
                       setSubtitleOffset={setSubtitleOffset}
-                    />{" "}
+                    />
                     {media_type === "tv" && metadata && (
                       <Episodes
                         id={id}

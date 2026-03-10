@@ -24,9 +24,9 @@ import {
 } from "@tabler/icons-react";
 import { ArrowLeft, Settings, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Subtitle } from "@/hook/subtitle-hooks";
 import { ServerTypes } from "./hooks/useServerManager";
 import { AudioTrackTypes } from "./hooks/useVideoSource";
+import { Subtitle } from "@/hook/open-subtitle";
 
 type Props = {
   quality: Level[];
@@ -237,7 +237,6 @@ export default function PlayerSettings({
             </div>
           )} */}
 
-          {/* Subtitle List */}
           {openSub && (
             <div>
               <h1 className="px-3 py-2 text-sm font-medium bg-background">
@@ -257,12 +256,13 @@ export default function PlayerSettings({
                 {data_sub.map((s, idx) => (
                   <SubtitleButton
                     key={idx}
-                    active={s.url === selectedSub}
-                    label={s.display}
+                    active={s.downloadLink === selectedSub}
+                    label={s.language}
                     onClick={() => {
-                      setSelectedSub(s.url);
+                      setSelectedSub(s.downloadLink);
                       setOpenSub(false);
                     }}
+                    // flag={s.flagUrl}
                   />
                 ))}
               </div>
@@ -393,7 +393,7 @@ export default function PlayerSettings({
                   <MenuButton
                     label={`Timing ${
                       selectedSub &&
-                      `(${data_sub.find((s) => s.url === selectedSub)?.display})`
+                      `(${data_sub.find((s) => s.downloadLink === selectedSub)?.language})`
                     }`}
                     onClick={() => setOpenTiming(true)}
                   />
