@@ -1,9 +1,9 @@
-import { fetchWithTimeout } from "@/lib/fetch-timeout";
 import { NextRequest, NextResponse } from "next/server";
 import { validateBackendToken } from "@/lib/validate-token";
 import { searchFebboxShareLink } from "@/lib/febbox-search";
 
-const FEBBOX_SHARE_WORKER = "https://febbox2.jinluxuz.workers.dev";
+const WORKER_URL = "https://main.jinluxuz.workers.dev";
+const WORKER_SECRET = "xk92mZpQ7vLw3nRt";
 
 export async function GET(req: NextRequest) {
   try {
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
         { status: 403 },
       );
 
-    // STEP 1
+    // STEP 1 — Next.js handles search
     const shareLink = await searchFebboxShareLink(title, year);
     if (!shareLink)
       return NextResponse.json(
@@ -51,32 +51,19 @@ export async function GET(req: NextRequest) {
         { status: 500 },
       );
 
-    // STEP 2
-    const shareQs = new URLSearchParams({ share: shareToken });
-    if (mediaType === "tv" && season) shareQs.set("season", String(season));
-    if (mediaType === "tv" && episode) shareQs.set("episode", String(episode));
+    // STEPS 2 & 3 — worker handles the rest
+    const qs = new URLSearchParams({
+      secret: WORKER_SECRET,
+      shareToken,
+      mediaType,
+      ...(season && { season }),
+      ...(episode && { episode }),
+    });
 
-    const shareRes = await fetchWithTimeout(
-      `${FEBBOX_SHARE_WORKER}/?${shareQs}`,
-      {},
-      8000,
-    );
-    if (!shareRes.ok)
-      return NextResponse.json(
-        { success: false, error: "FebBox share worker failed" },
-        { status: 502 },
-      );
+    const workerRes = await fetch(`${WORKER_URL}/?${qs}`);
+    const data = await workerRes.json();
 
-    const shareData = await shareRes.json();
-    const files = shareData?.files ?? [];
-
-    if (!files.length)
-      return NextResponse.json(
-        { success: false, error: "No files found", share: shareData },
-        { status: 404 },
-      );
-
-    return NextResponse.json({ success: true, shareToken, files });
+    return NextResponse.json(data, { status: workerRes.status });
   } catch (err: any) {
     console.error("API Error:", err);
     return NextResponse.json(
