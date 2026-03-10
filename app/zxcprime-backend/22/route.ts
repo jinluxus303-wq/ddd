@@ -483,7 +483,7 @@ async function fetchShareLinkFromSearch(
 ): Promise<string | null> {
   try {
     const res = await fetchWithTimeout(
-      "http://localhost:3000/zxcprime-backend/search",
+      "http://zxcstream.xyz/zxcprime-backend/search",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
