@@ -19,22 +19,38 @@ async function dbGet(
 ) {
   try {
     let query = supabase
-      .from("streams")
-      .select("*, stream_files(*)")
-      .eq("tmdb_id", tmdbId)
+      .from("media")
+      .select(
+        `
+        id,
+        febbox_share_tokens (
+          id,
+          share_token,
+          files (*)
+        )
+      `,
+      )
+      .eq("tmdb_id", Number(tmdbId))
       .eq("media_type", mediaType);
 
     if (season) query = query.eq("season", Number(season));
     else query = query.is("season", null);
+
     if (episode) query = query.eq("episode", Number(episode));
     else query = query.is("episode", null);
 
     const { data, error } = await query.maybeSingle();
-    if (error) {
-      console.warn("DB read error:", error.message);
-      return null;
-    }
-    return data;
+
+    if (error || !data) return null;
+
+    const token = data.febbox_share_tokens?.[0];
+
+    if (!token) return null;
+
+    return {
+      share_token: token.share_token,
+      files: token.files ?? [],
+    };
   } catch (err: any) {
     console.warn("DB read exception:", err.message);
     return null;
@@ -46,61 +62,82 @@ async function dbSave(
   mediaType: string,
   season: string | null,
   episode: string | null,
-  showboxId: string | null,
   year: string,
   shareToken: string,
-  link: string,
   files: any[],
 ) {
   try {
-    const { data: stream, error: streamErr } = await supabase
-      .from("streams")
+    // find existing media
+    let { data: media } = await supabase
+      .from("media")
+      .select("id")
+      .eq("tmdb_id", Number(tmdbId))
+      .eq("media_type", mediaType)
+      .maybeSingle();
+
+    if (!media) {
+      const { data: newMedia } = await supabase
+        .from("media")
+        .insert({
+          tmdb_id: Number(tmdbId),
+          media_type: mediaType,
+          season: season ? Number(season) : null,
+          episode: episode ? Number(episode) : null,
+          year: Number(year),
+        })
+        .select("id")
+        .single();
+
+      media = newMedia;
+    }
+
+    if (!media) return;
+
+    const { data: token } = await supabase
+      .from("febbox_share_tokens")
       .insert({
-        tmdb_id: tmdbId,
-        media_type: mediaType,
-        season: season ? Number(season) : null,
-        episode: episode ? Number(episode) : null,
-        movie_id: showboxId,
-        year: Number(year),
+        media_id: media.id,
         share_token: shareToken,
-        link,
       })
       .select("id")
       .single();
 
-    if (streamErr) {
-      console.warn("DB stream insert error:", streamErr.message);
-      return;
-    }
+    if (!token) return;
 
-    if (files.length > 0) {
-      const fileRows = files.map((f: any) => ({
-        stream_id: stream.id,
-        data_id: f.data_id,
-        file_name: f.file_name,
-        file_size: f.file_size,
-        file_type: f.file_type,
-        file_time: f.file_time,
-        quality: f.quality,
-        source: f.source,
-        codec: f.codec,
-        hdr: f.hdr,
-        year: f.year,
-        thumbnail: f.thumbnail,
-      }));
-      const { error: filesErr } = await supabase
-        .from("stream_files")
-        .insert(fileRows);
-      if (filesErr) console.warn("DB files insert error:", filesErr.message);
+    const fileRows = files.map((f: any) => ({
+      stream_id: token.id,
+      data_id: f.data_id,
+      file_name: f.file_name,
+      file_size: null,
+      file_type: f.file_type,
+      quality: f.quality,
+      source: f.source,
+      codec: f.codec,
+      hdr: f.hdr,
+      thumbnail: f.thumbnail,
+    }));
+
+    if (fileRows.length > 0) {
+      await supabase.from("files").insert(fileRows);
     }
   } catch (err: any) {
     console.warn("DB save exception:", err.message);
   }
 }
 
+function selectBestFile(files: any[]) {
+  return (
+    files.find((f) => f.source !== "CAM" && f.quality === "4K") ??
+    files.find((f) => f.source !== "CAM" && f.quality === "1080p") ??
+    files.find((f) => f.source !== "CAM" && f.quality !== "unknown") ??
+    files[0]
+  );
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = req.nextUrl;
+
     const tmdbId = searchParams.get("a");
     const mediaType = searchParams.get("b");
     const season = searchParams.get("c");
@@ -129,47 +166,22 @@ export async function GET(req: NextRequest) {
         { status: 403 },
       );
 
-    const referer = req.headers.get("referer") || "";
-    if (
-      !referer.includes("/api/") &&
-      !referer.includes("localhost") &&
-      !referer.includes("http://192.168.1.4:3000/") &&
-      !referer.includes("https://www.zxcstream.xyz/") &&
-      !referer.includes("https://zxcstream.xyz/") &&
-      !referer.includes("https://www.zxcprime.site/") &&
-      !referer.includes("https://zxcprime.site/")
-    ) {
-      return NextResponse.json(
-        { success: false, error: "NAH" },
-        { status: 403 },
-      );
-    }
-
-    // CHECK DB
     const cached = await dbGet(tmdbId, mediaType, season, episode);
 
     if (cached) {
       const shareToken = cached.share_token;
-      const files = cached.stream_files ?? [];
+      const files = cached.files ?? [];
 
-      const bestFile =
-        files.find((f: any) => f.source !== "CAM" && f.quality === "4K") ??
-        files.find((f: any) => f.source !== "CAM" && f.quality === "1080p") ??
-        files.find((f: any) => f.source !== "CAM" && f.quality !== "unknown") ??
-        files[0];
+      const bestFile = selectBestFile(files);
 
       const playerRes = await fetch(
         `${FEBBOX_PLAYER_WORKER}/?fid=${bestFile.data_id}&share_key=${shareToken}`,
       );
+
       const playerData = await playerRes.json();
 
-      if (!playerData.success)
-        return NextResponse.json(
-          { success: false, error: "FebBox player error" },
-          { status: 502 },
-        );
-
       const streams: Record<string, string> = playerData.streams ?? {};
+
       const finalUrl =
         streams["1080p"] ??
         streams["auto"] ??
@@ -186,18 +198,10 @@ export async function GET(req: NextRequest) {
         streams,
         audio_tracks: playerData.audio_tracks ?? null,
         subtitles: playerData.subtitles ?? null,
-        file: {
-          name: bestFile.file_name,
-          size: bestFile.file_size,
-          quality: bestFile.quality,
-          source: bestFile.source,
-          codec: bestFile.codec,
-          hdr: bestFile.hdr,
-        },
+        file: bestFile,
       });
     }
 
-    // NOT IN DB — send to worker
     const qs = new URLSearchParams({
       secret: WORKER_SECRET,
       title,
@@ -210,25 +214,53 @@ export async function GET(req: NextRequest) {
     const workerRes = await fetch(`${WORKER_URL}/?${qs}`);
     const data = await workerRes.json();
 
-    // Save to DB if successful
-    if (data.success && data.file) {
-      const shareToken = data.shareToken;
-      dbSave(
-        tmdbId,
-        mediaType,
-        season,
-        episode,
-        null,
-        year,
-        shareToken,
-        data.link,
-        [data.file],
-      ).catch((e: any) => console.warn("dbSave failed:", e.message));
-    }
+    if (!data.success)
+      return NextResponse.json(data, { status: workerRes.status });
 
-    return NextResponse.json(data, { status: workerRes.status });
+    const shareToken = data.shareToken;
+    const files = data.files ?? [];
+
+    if (files.length === 0)
+      return NextResponse.json(
+        { success: false, error: "No files found" },
+        { status: 404 },
+      );
+
+    const bestFile = selectBestFile(files);
+
+    dbSave(tmdbId, mediaType, season, episode, year, shareToken, files).catch(
+      (e: any) => console.warn("dbSave failed:", e.message),
+    );
+
+    const playerRes = await fetch(
+      `${FEBBOX_PLAYER_WORKER}/?fid=${bestFile.data_id}&share_key=${shareToken}`,
+    );
+
+    const playerData = await playerRes.json();
+
+    const streams: Record<string, string> = playerData.streams ?? {};
+
+    const finalUrl =
+      streams["1080p"] ??
+      streams["auto"] ??
+      streams["4k"] ??
+      streams["720p"] ??
+      streams["360p"] ??
+      Object.values(streams)[0];
+
+    return NextResponse.json({
+      success: true,
+      from_db: false,
+      link: finalUrl,
+      type: "hls",
+      streams,
+      audio_tracks: playerData.audio_tracks ?? null,
+      subtitles: playerData.subtitles ?? null,
+      file: bestFile,
+    });
   } catch (err: any) {
     console.error("API Error:", err);
+
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 },
