@@ -1,4 +1,4 @@
-// app/api/search/route.ts
+// app/zxcprime-backend/search/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 async function search(q: string) {

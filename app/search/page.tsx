@@ -20,7 +20,7 @@ export default function SearchPage() {
     setResults([]);
 
     try {
-      const res = await fetch("/search", {
+      const res = await fetch("/zxcprime-backend/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ q: query }),

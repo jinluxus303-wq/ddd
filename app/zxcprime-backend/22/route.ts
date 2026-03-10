@@ -10,14 +10,6 @@ const supabase = createClient(
 );
 
 // ─── Worker URLs ──────────────────────────────────────────────────────────────
-const SHOWBOX_WORKERS = [
-  "https://febbox.jinluxuz.workers.dev/",
-  "https://febbox.mosangfour.workers.dev",
-  "https://febbox.zxcprime359.workers.dev/",
-  "https://shy-pine-01bc.zxcprime366.workers.dev/",
-  // add more here
-];
-
 const FEBBOX_SHARE_WORKER = "https://febbox2.jinluxuz.workers.dev";
 const FEBBOX_PLAYER_WORKER = "https://febbox3.jinluxuz.workers.dev";
 
@@ -111,21 +103,41 @@ async function dbSave(
   }
 }
 
-// ─── ShowBox worker pool ──────────────────────────────────────────────────────
+// ─── Search engine: get FebBox share link ─────────────────────────────────────
 
-async function fetchShowBox(qs: URLSearchParams): Promise<any> {
-  const shuffled = [...SHOWBOX_WORKERS].sort(() => Math.random() - 0.5);
-  for (const worker of shuffled) {
-    try {
-      const res = await fetchWithTimeout(`${worker}/?${qs}`, {}, 8000);
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (data?.source_response?.data?.link) return data;
-    } catch (_) {
-      continue;
+async function fetchShareLinkFromSearch(
+  title: string,
+  year: string,
+): Promise<string | null> {
+  try {
+    const res = await fetchWithTimeout(
+      "http://localhost:3000/zxcprime-backend/search",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          q: `febbox ${title} ${year} shared by showbox`,
+        }),
+      },
+      8000,
+    );
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const results: { url: string }[] = data?.results ?? [];
+
+    // Find the first febbox.com/share/... URL
+    for (const result of results) {
+      const match = result.url.match(/febbox\.com\/share\/([A-Za-z0-9_-]+)/);
+      if (match) return `https://www.febbox.com/share/${match[1]}`;
     }
+
+    return null;
+  } catch (err: any) {
+    console.warn("Search engine error:", err.message);
+    return null;
   }
-  return null;
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────────
@@ -186,7 +198,6 @@ export async function GET(req: NextRequest) {
 
     let shareToken: string;
     let files: any[];
-    let showboxMetadata: any = null;
     let fromDb = false;
 
     if (cached) {
@@ -195,35 +206,23 @@ export async function GET(req: NextRequest) {
       fromDb = true;
     } else {
       // ─────────────────────────────────────────────────────────────────────
-      // STEP 1 — ShowBox: get FebBox share link
+      // STEP 1 — Search engine: get FebBox share link
       // ─────────────────────────────────────────────────────────────────────
-      const showboxQs = new URLSearchParams({
-        type: mediaType === "tv" ? "tv" : "movie",
-        title: title,
-        year: String(year),
-      });
-      if (mediaType === "tv" && season) showboxQs.set("season", String(season));
-      if (mediaType === "tv" && episode)
-        showboxQs.set("episode", String(episode));
+      const shareLink = await fetchShareLinkFromSearch(title, year);
 
-      const showboxData = await fetchShowBox(showboxQs);
+      console.log("shareLink from search", shareLink);
 
-      console.log("dataaaaaaaaaaaaa", showboxData);
-      if (!showboxData) {
+      if (!shareLink) {
         return NextResponse.json(
           {
             success: false,
-            error: "All ShowBox workers failed or returned no share link",
+            error: "Search engine returned no FebBox share link",
           },
           { status: 502 },
         );
       }
 
-      const shareLink: string = showboxData.source_response.data.link;
       shareToken = shareLink.split("/share/")[1];
-      showboxMetadata = showboxData.metadata ?? null;
-      const showboxId =
-        showboxData.ids?.movie_id ?? showboxData.ids?.show_id ?? null;
 
       if (!shareToken) {
         return NextResponse.json(
@@ -262,7 +261,7 @@ export async function GET(req: NextRequest) {
       }
 
       const shareData = await shareRes.json();
-      console.log("shareDataaaaaaaaaaaaaaaa", shareData);
+      // console.log("shareDataaaaaaaaaaaaaaaa", shareData);
       files = shareData?.files ?? [];
 
       if (!files.length) {
@@ -282,7 +281,7 @@ export async function GET(req: NextRequest) {
         mediaType,
         season,
         episode,
-        showboxId,
+        null,
         year,
         shareToken,
         shareLink,
@@ -360,7 +359,6 @@ export async function GET(req: NextRequest) {
         codec: bestFile.codec,
         hdr: bestFile.hdr,
       },
-      metadata: showboxMetadata,
     });
   } catch (err: any) {
     console.error("ShowBox/FebBox API Error:", err);
