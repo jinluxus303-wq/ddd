@@ -595,7 +595,7 @@ export async function GET(req: NextRequest) {
       }
 
       shareToken = shareLink.split("/share/")[1];
-
+      console.log("shareToken", shareToken);
       if (!shareToken) {
         return NextResponse.json(
           {
