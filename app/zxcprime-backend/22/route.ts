@@ -1,40 +1,5 @@
-import { fetchWithTimeout } from "@/lib/fetch-timeout";
 import { NextRequest, NextResponse } from "next/server";
 import { validateBackendToken } from "@/lib/validate-token";
-
-async function fetchShareLinkFromSearch(
-  title: string,
-  year: string,
-): Promise<string | null> {
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://zxcprime.site";
-
-    const res = await fetchWithTimeout(
-      `${baseUrl}/zxcprime-backend/search`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          q: `febbox ${title} ${year} shared by showbox`,
-        }),
-      },
-      8000,
-    );
-
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    for (const result of (data?.results ?? []) as { url: string }[]) {
-      const match = result.url.match(/febbox\.com\/share\/([A-Za-z0-9_-]+)/);
-      if (match) return `https://www.febbox.com/share/${match[1]}`;
-    }
-
-    return null;
-  } catch (err: any) {
-    console.warn("Search engine error:", err.message);
-    return null;
-  }
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -65,29 +30,8 @@ export async function GET(req: NextRequest) {
         { status: 403 },
       );
 
-    const referer = req.headers.get("referer") ?? "";
-    const allowed = [
-      "/api/",
-      "localhost",
-      "192.168.1.4:3000",
-      "zxcstream.xyz",
-      "zxcprime.site",
-    ];
-    if (!allowed.some((h) => referer.includes(h)))
-      return NextResponse.json(
-        { success: false, error: "Forbidden" },
-        { status: 403 },
-      );
-
-    const shareLink = await fetchShareLinkFromSearch(title, year);
-
-    if (!shareLink)
-      return NextResponse.json(
-        { success: false, error: "No FebBox share link found" },
-        { status: 502 },
-      );
-
-    return NextResponse.json({ success: true, link: shareLink });
+    // TODO: replace with your actual search logic
+    return NextResponse.json({ success: true, title, year });
   } catch (err: any) {
     console.error("API Error:", err);
     return NextResponse.json(
