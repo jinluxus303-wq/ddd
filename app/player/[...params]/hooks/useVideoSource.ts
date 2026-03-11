@@ -114,7 +114,7 @@ export function useVideoSource({
       video.src = source.link;
       video.play().catch(() => {});
     }
-  }, [source]);
+  }, [source?.link]);
 
   useEffect(() => {
     if (hlsRef.current) {

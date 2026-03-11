@@ -268,28 +268,32 @@ export default function Player() {
     const video = videoRef.current;
     if (!video) return;
 
-    const tracks = video.textTracks;
-    if (tracks.length === 0) return;
+    // Remove all existing tracks
+    video.querySelectorAll("track").forEach((t) => t.remove());
 
-    const track = tracks[0];
-    if (!track.cues) return;
+    if (!openSubVttUrl || !toggleSub) return;
 
-    // Store original times on first load
-    for (let i = 0; i < track.cues.length; i++) {
-      const cue = track.cues[i] as any;
-      if (cue.originalStartTime === undefined) {
-        cue.originalStartTime = cue.startTime;
-        cue.originalEndTime = cue.endTime;
+    const track = document.createElement("track");
+    track.kind = "subtitles";
+    track.src = openSubVttUrl;
+    track.default = true;
+    video.appendChild(track);
+
+    track.addEventListener("load", () => {
+      track.track.mode = "showing";
+      const cues = track.track.cues;
+      if (!cues) return;
+      for (let i = 0; i < cues.length; i++) {
+        const cue = cues[i] as any;
+        if (cue.originalStartTime === undefined) {
+          cue.originalStartTime = cue.startTime;
+          cue.originalEndTime = cue.endTime;
+        }
+        cue.startTime = cue.originalStartTime + subtitleOffset;
+        cue.endTime = cue.originalEndTime + subtitleOffset;
       }
-    }
-
-    // Apply offset to all cues
-    for (let i = 0; i < track.cues.length; i++) {
-      const cue = track.cues[i] as any;
-      cue.startTime = cue.originalStartTime + subtitleOffset;
-      cue.endTime = cue.originalEndTime + subtitleOffset;
-    }
-  }, [subtitleOffset, openSubVttUrl, selectedSub]);
+    });
+  }, [openSubVttUrl, toggleSub, subtitleOffset]);
   const triggerAd = useAdStore((state) => state.triggerAd);
   return (
     <div
@@ -316,16 +320,7 @@ export default function Player() {
       }`}
       onClick={triggerAd}
     >
-      <video muted={autoPlay} className="h-full w-full" ref={videoRef}>
-        {openSubVttUrl && !isInitializing && toggleSub && (
-          <track
-            key={openSubVttUrl}
-            kind="subtitles"
-            src={openSubVttUrl}
-            default
-          />
-        )}
-      </video>
+      <video muted={autoPlay} className="h-full w-full" ref={videoRef} />
       {serversFailed && (
         <Failed
           media_type={media_type}
