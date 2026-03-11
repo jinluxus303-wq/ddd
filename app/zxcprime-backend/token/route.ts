@@ -84,8 +84,8 @@ export async function POST(req: NextRequest) {
 
   if (!validateFrontendToken(f_token, idd, ts)) {
     return NextResponse.json(
-      { error: "Invalid frontend token" },
-      { status: 403 },
+      { error: "Blocked IP tried to access:" },
+      { status: 422 },
     );
   }
 
